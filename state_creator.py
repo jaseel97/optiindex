@@ -8,15 +8,6 @@ from pymongo.errors import OperationFailure
 
 import query_set
 
-# def analyze_sql_queries(state, query_db):
-#     for collection_name in query_db.keys():
-#         for query in query_db[collection_name]:
-#             extract_where_fields(query['sql'])
-#             extract_insert_fields(query['sql'])
-#             extract_delete_fields(query['sql'])
-#             extract_join_fields(query['sql'])
-#             extract_aggregate_fields(query['sql'])
-
 def add_index_info(db_conn, state):
     for collection_name, fields in state.items():
         collection = db_conn[collection_name]
@@ -151,31 +142,12 @@ def remove_duplicates_preserve_order(lst):
 
 def extract_collection_fields(db_conn, query_db):
     collection_fields = {}
-    # from_regex = re.compile(r"FROM\s+(\w+)", re.IGNORECASE)
-    # update_regex = re.compile(r"UPDATE\s+(\w+)", re.IGNORECASE)
-    # delete_regex = re.compile(r"DELETE\s+FROM\s+(\w+)", re.IGNORECASE)
-    # insert_regex = re.compile(r"INTO\s+(\w+)", re.IGNORECASE)
-
     for collection_name in query_db.keys():
         print(collection_name)
         document = db_conn[collection_name].find_one()
         collection_fields[collection_name] = list(document.keys())
         collection_fields[collection_name].remove('_id')
         print(collection_fields[collection_name])
-        # for query in query_db[collection_name]:
-        #     sql = query['sql']
-        #     collection = db_conn[collection_name]
-            #     document = collection.find_one()
-            # match = from_regex.search(sql) or update_regex.search(sql) or delete_regex.search(sql) or insert_regex.search(sql)
-
-            # if match:
-            #     collection_name = match.group(1)
-            #     collection = db_conn[collection_name]
-            #     document = collection.find_one()
-            #     if document:
-            #         collection_fields[collection_name] = list(document.keys())
-            #     else:
-            #         collection_fields[collection_name] = {}
     return collection_fields
 
 def calculate_distinct_count(collection, field):
@@ -211,11 +183,10 @@ def infer_field_type(value):
 def add_cardinality_and_type_info(db_conn, state):
     for collection_name, fields in state.items():
         collection = db_conn[collection_name]
-        total_count = collection.count_documents({})  # Get total number of documents in the collection
+        total_count = collection.count_documents({})
 
         field_cardinality = {}
-        sample_document = collection.find_one()  # Get a sample document to infer field types
-
+        sample_document = collection.find_one()
         for field in fields:
             distinct_count = calculate_distinct_count(collection, field)
             print(collection_name, "->", field, ":", distinct_count, "/", total_count)
