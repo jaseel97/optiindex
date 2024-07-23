@@ -2,6 +2,7 @@ from collections import defaultdict
 from datetime import datetime
 import json
 import re
+import time
 from pymongo import MongoClient
 from pymongo.errors import OperationFailure
 
@@ -16,9 +17,9 @@ import query_set
 #             extract_join_fields(query['sql'])
 #             extract_aggregate_fields(query['sql'])
 
-def add_index_inf0(state, db):
+def add_index_info(db_conn, state):
     for collection_name, fields in state.items():
-        collection = db[collection_name]
+        collection = db_conn[collection_name]
         indexes = collection.index_information()
         indexed_fields = {key[0] for index in indexes.values() for key in index['key']}
 
@@ -148,7 +149,7 @@ def remove_duplicates_preserve_order(lst):
             seen.add(item)
     return unique_list
 
-def extract_collection_fields(query_db, db_conn):
+def extract_collection_fields(db_conn, query_db):
     collection_fields = {}
     # from_regex = re.compile(r"FROM\s+(\w+)", re.IGNORECASE)
     # update_regex = re.compile(r"UPDATE\s+(\w+)", re.IGNORECASE)
@@ -207,7 +208,7 @@ def infer_field_type(value):
     else:
         return 'unknown'
 
-def add_cardinality_and_type_info(state, db_conn):
+def add_cardinality_and_type_info(db_conn, state):
     for collection_name, fields in state.items():
         collection = db_conn[collection_name]
         total_count = collection.count_documents({})  # Get total number of documents in the collection
@@ -227,7 +228,70 @@ def add_cardinality_and_type_info(state, db_conn):
         state[collection_name] = field_cardinality
     return state
 
-def saveAsJSON(field_analysis, filename='field_analysis.json'):
+def execute_queries(db, query_db):
+    metrics = {
+        'executionTimeMillis': 0,
+        'nReturned': 0,
+        'totalKeysExamined': 0,
+        'totalDocsExamined': 0
+    }
+    
+    for collection, queries in query_db.items():
+        ctr = 0;
+        for query in queries:
+            ctr+=1
+            print(collection," -> ", ctr)
+            if 'UPDATE' in query['sql'] or 'DELETE' in query['sql'] or 'INSERT INTO' in query['sql']:
+                print('insert/update/delete')
+                # start_time = time.time()
+                # original_document = db[collection].find_one(query_info['filter'])
+                # query_result = query_info['query'](db)
+                # end_time = time.time()
+            elif 'COUNT(*)' in query['sql']:
+                print('count')
+                filter_criteria = {'price': {'$gt': 500}}
+                explain_plan = db.command(
+                    'explain',
+                    {
+                        'aggregate': collection,
+                        'pipeline': [
+                            {'$match': filter_criteria},
+                            {'$count': 'total_docs'}
+                        ],
+                        'cursor': {}
+                    },
+                    verbosity='executionStats'
+                )
+                metrics['executionTimeMillis'] += explain_plan['stages'][0]['$cursor']['executionStats']['executionTimeMillis']
+                metrics['nReturned'] += explain_plan['stages'][0]['$cursor']['executionStats']['nReturned']
+                metrics['totalKeysExamined'] += explain_plan['stages'][0]['$cursor']['executionStats']['totalKeysExamined']
+                metrics['totalDocsExamined'] += explain_plan['stages'][0]['$cursor']['executionStats']['totalDocsExamined']
+            elif 'pipeline' in query.keys():
+                print('aggregate')
+                explain_plan = db.command(
+                    'explain',
+                    {
+                        'aggregate': collection,
+                        'pipeline': query['pipeline'],
+                        'cursor': {}
+                    },
+                    verbosity='executionStats'
+                )
+                metrics['executionTimeMillis'] += explain_plan['executionStats']['executionTimeMillis']
+                metrics['nReturned'] += explain_plan['executionStats']['nReturned']
+                metrics['totalKeysExamined'] += explain_plan['executionStats']['totalKeysExamined']
+                metrics['totalDocsExamined'] += explain_plan['executionStats']['totalDocsExamined']
+            else:
+                print('read')
+                explain_plan = query['query'](db).explain()
+                metrics['executionTimeMillis'] += explain_plan['executionStats']['executionTimeMillis']
+                metrics['nReturned'] += explain_plan['executionStats']['nReturned']
+                metrics['totalKeysExamined'] += explain_plan['executionStats']['totalKeysExamined']
+                metrics['totalDocsExamined'] += explain_plan['executionStats']['totalDocsExamined']
+
+    return metrics
+
+def saveAsJSON(field_analysis, filename='state.json'):
     with open(filename, 'w') as file:
         json.dump(field_analysis, file, indent=4)
 
@@ -235,11 +299,16 @@ if __name__ == "__main__":
     client = MongoClient('mongodb://localhost:27017/')
     db_conn = client['benchmark_db1']
 
-    state = extract_collection_fields(query_set.query_db, db_conn)
-    state = add_cardinality_and_type_info(state, db_conn)
-    state = add_operation_count_info(state, query_set.query_db)
-    state = add_index_inf0(state, db_conn)
-    saveAsJSON(state)
+    # #constants
+    # state = extract_collection_fields(db_conn, query_set.query_db)
+    # state = add_cardinality_and_type_info(db_conn, state)
+    # state = add_operation_count_info(state, query_set.query_db)
+
+    # #variable
+    # state = add_index_info(db_conn, state)
+    # saveAsJSON(state)
+    metrics = execute_queries(db_conn, query_set.query_db)
+    print(metrics)
 
     client.close()
 
