@@ -49,7 +49,7 @@ collections = {
 }
 
 # Function to create and populate collections
-def create_and_populate_collections(db, collections, num_records=900000):
+def create_and_populate_collections(db, collections, num_records=200000):
     for collection_name, fields in collections.items():
         collection = db[collection_name]
         records = []
