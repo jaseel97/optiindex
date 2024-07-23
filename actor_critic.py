@@ -2,34 +2,32 @@ import numpy as np
 import tensorflow as tf
 from tensorflow.keras import layers, models, optimizers
 
-# Define the actor network
+# actor network
 def build_actor(input_shape):
     model = models.Sequential([
         layers.Input(shape=input_shape),
         layers.Dense(512, activation='relu'),
         layers.Dense(256, activation='relu'),
-        layers.Dense(100, activation='sigmoid')  # Output layer with sigmoid activation
+        layers.Dense(100, activation='sigmoid')
     ])
     return model
 
-# Define the critic network
+# critic network
 def build_critic(input_shape):
     model = models.Sequential([
         layers.Input(shape=input_shape),
         layers.Dense(512, activation='relu'),
         layers.Dense(256, activation='relu'),
-        layers.Dense(1)  # Output a single value
+        layers.Dense(1)
     ])
     return model
 
-# Placeholder reward function (to be replaced with actual implementation)
 def reward_function(state, value):
-    # Example: reward based on the mean of state values and the value from critic
     state_mean = np.mean(state)
     reward = state_mean + value
     return reward
 
-# Define input shape and build the models
+# input shape and build the models
 input_shape = (800,)
 actor = build_actor(input_shape)
 critic = build_critic(input_shape)
@@ -38,7 +36,7 @@ critic = build_critic(input_shape)
 actor_optimizer = optimizers.Adam(learning_rate=0.001)
 critic_optimizer = optimizers.Adam(learning_rate=0.001)
 
-# Training step
+# Training
 def train_step(state):
     state = np.reshape(state, (1, -1))  # Reshape the input to (1, 800)
     with tf.GradientTape(persistent=True) as tape:
