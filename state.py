@@ -154,11 +154,11 @@ def remove_duplicates_preserve_order(lst):
 def extract_collection_fields(db_conn, query_db):
     collection_fields = {}
     for collection_name in query_db.keys():
-        print(collection_name)
+        # print(collection_name)
         document = db_conn[collection_name].find_one()
         collection_fields[collection_name] = list(document.keys())
         collection_fields[collection_name].remove('_id')
-        print(collection_fields[collection_name])
+        # print(collection_fields[collection_name])
     return collection_fields
 
 def calculate_distinct_count(collection, field):
@@ -293,8 +293,9 @@ def convertToStateVector(state):
     field_list = []
     for collection, fields in state.items():
         collection_list.append(collection)
+        collection_fields = []
         for field, features in fields.items():
-            field_list.append(field)
+            collection_fields.append(field)
             cardinality = features.get("cardinality", 0.0)
             field_type = type_mapping.get(features.get("type", "str"), 0)
             where = features.get("where", 0)
@@ -305,7 +306,9 @@ def convertToStateVector(state):
             indexed = features.get("indexed", 0)
 
             state_vector.extend([cardinality, field_type, where, insert, delete, join, aggregation, indexed])
-    return state_vector, collection_list, field_list
+        field_list.append(collection_fields)
+        # print(collection_fields)
+    return state_vector[:], collection_list[:], field_list[:]
 
 def getQueryMetrics(db_conn):
     metrics = execute_queries_og(db_conn, query_set.query_db)
@@ -315,13 +318,19 @@ if __name__ == "__main__":
     client = MongoClient('mongodb://localhost:27017/')
     db_conn = client['benchmark_db1']
 
-    state = getStaticInfo(db_conn)
-    state = addIndexInfo(db_conn, state)
-    saveAsJSON(state)
+    # state = getStaticInfo(db_conn)
+    # state = addIndexInfo(db_conn, state)
+    # saveAsJSON(state)
 
-    metrics = getQueryMetrics(db_conn)
-    print(metrics)
-    client.close()
+    # metrics = getQueryMetrics(db_conn)
+    # print(metrics)
+    # client.close()
+
+    partial_state = dict(getStaticInfo(db_conn))
+    og_state_dict = dict(addIndexInfo(db_conn, partial_state))
+    og_state_vector, collections, fields = convertToStateVector(og_state_dict) # returns a 1X192 list
+    print(collections)
+    print(fields)
 
     # # #constants
     # state = extract_collection_fields(db_conn, query_set.query_db)
