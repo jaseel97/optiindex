@@ -8,6 +8,17 @@ from pymongo.errors import OperationFailure
 
 import query_set
 
+type_mapping = {
+        "int": 0,
+        "float": 1,
+        "str": 2,
+        "bool" : 3,
+        "list" : 4,
+        "dict" : 5,
+        "datetime": 6,
+        "unknown": 7
+    }
+
 def add_index_info(db_conn, state):
     for collection_name, fields in state.items():
         collection = db_conn[collection_name]
@@ -275,6 +286,26 @@ def getStaticInfo(db_conn):
 def addIndexInfo(db_conn, state):
     state = add_index_info(db_conn, state)
     return state
+
+def convertToStateVector(state):
+    state_vector = []
+    collection_list = []
+    field_list = []
+    for collection, fields in state.items():
+        collection_list.append(collection)
+        for field, features in fields.items():
+            field_list.append(field)
+            cardinality = features.get("cardinality", 0.0)
+            field_type = type_mapping.get(features.get("type", "str"), 0)
+            where = features.get("where", 0)
+            insert = features.get("insert", 0)
+            delete = features.get("delete", 0)
+            join = features.get("join", 0)
+            aggregation = features.get("aggregation", 0)
+            indexed = features.get("indexed", 0)
+
+            state_vector.extend([cardinality, field_type, where, insert, delete, join, aggregation, indexed])
+    return state_vector, collection_list, field_list
 
 def getQueryMetrics(db_conn):
     metrics = execute_queries_og(db_conn, query_set.query_db)
