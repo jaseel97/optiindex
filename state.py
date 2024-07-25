@@ -199,14 +199,14 @@ def add_cardinality_and_type_info(db_conn, state):
         state[collection_name] = field_cardinality
     return state
 
-def execute_queries(db, query_db):
+def execute_queries_og(db, query_db):
     metrics = {
         'executionTimeMillis': 0,
         'nReturned': 0,
         'totalKeysExamined': 0,
         'totalDocsExamined': 0
     }
-    
+
     for collection, queries in query_db.items():
         ctr = 0;
         for query in queries:
@@ -266,20 +266,40 @@ def saveAsJSON(field_analysis, filename='state.json'):
     with open(filename, 'w') as file:
         json.dump(field_analysis, file, indent=4)
 
+def getStaticInfo(db_conn):
+    state = extract_collection_fields(db_conn, query_set.query_db)
+    state = add_cardinality_and_type_info(db_conn, state)
+    state = add_operation_count_info(state, query_set.query_db)
+    return state
+
+def addIndexInfo(db_conn, state):
+    state = add_index_info(db_conn, state)
+    return state
+
+def getQueryMetrics(db_conn):
+    metrics = execute_queries_og(db_conn, query_set.query_db)
+    return metrics
+
 if __name__ == "__main__":
     client = MongoClient('mongodb://localhost:27017/')
     db_conn = client['benchmark_db1']
 
-    # #constants
+    state = getStaticInfo(db_conn)
+    state = addIndexInfo(db_conn, state)
+    saveAsJSON(state)
+
+    metrics = getQueryMetrics(db_conn)
+    print(metrics)
+    client.close()
+
+    # # #constants
     # state = extract_collection_fields(db_conn, query_set.query_db)
     # state = add_cardinality_and_type_info(db_conn, state)
     # state = add_operation_count_info(state, query_set.query_db)
-
-    # #variable
+    # # #variable
     # state = add_index_info(db_conn, state)
     # saveAsJSON(state)
-    metrics = execute_queries(db_conn, query_set.query_db)
-    print(metrics)
-
-    client.close()
+    # metrics = execute_queries(db_conn, query_set.query_db)
+    # print(metrics)
+    # client.close()
 

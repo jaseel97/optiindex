@@ -19,8 +19,7 @@ ML Model to find optimal index allocation
 - Python 3+
     - pymongo
     - faker
-    - tensorflow
-    - keras
+    - torch
 
 ### Setup
 
