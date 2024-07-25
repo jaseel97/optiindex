@@ -31,6 +31,7 @@ ML Model to find optimal index allocation
 3. Install the following Python libraries
     ```sh
    pip install faker pymongo tensorflow keras
+   pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124
    ```
 4. In MongoDB, create a new database called benchmark_db1 using mongosh or atlas
 5. Run migrate.py to populate the db with sample values
