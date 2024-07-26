@@ -5,6 +5,8 @@ import re
 import time
 from pymongo import MongoClient
 from pymongo.errors import OperationFailure
+import concurrent.futures
+import copy
 
 import query_set
 
@@ -222,15 +224,16 @@ def execute_queries_og(db, query_db):
         ctr = 0;
         for query in queries:
             ctr+=1
-            print(collection," -> ", ctr)
+            # print(collection," -> ", ctr)
             if 'UPDATE' in query['sql'] or 'DELETE' in query['sql'] or 'INSERT INTO' in query['sql']:
-                print('insert/update/delete')
+                pass
+                # print('insert/update/delete')
                 # start_time = time.time()
                 # original_document = db[collection].find_one(query_info['filter'])
                 # query_result = query_info['query'](db)
                 # end_time = time.time()
             elif 'COUNT(*)' in query['sql']:
-                print('count')
+                # print('count')
                 filter_criteria = {'price': {'$gt': 500}}
                 explain_plan = db.command(
                     'explain',
@@ -249,7 +252,7 @@ def execute_queries_og(db, query_db):
                 metrics['totalKeysExamined'] += explain_plan['stages'][0]['$cursor']['executionStats']['totalKeysExamined']
                 metrics['totalDocsExamined'] += explain_plan['stages'][0]['$cursor']['executionStats']['totalDocsExamined']
             elif 'pipeline' in query.keys():
-                print('aggregate')
+                # print('aggregate')
                 explain_plan = db.command(
                     'explain',
                     {
@@ -264,12 +267,73 @@ def execute_queries_og(db, query_db):
                 metrics['totalKeysExamined'] += explain_plan['executionStats']['totalKeysExamined']
                 metrics['totalDocsExamined'] += explain_plan['executionStats']['totalDocsExamined']
             else:
-                print('read')
+                # print('read')
                 explain_plan = query['query'](db).explain()
                 metrics['executionTimeMillis'] += explain_plan['executionStats']['executionTimeMillis']
                 metrics['nReturned'] += explain_plan['executionStats']['nReturned']
                 metrics['totalKeysExamined'] += explain_plan['executionStats']['totalKeysExamined']
                 metrics['totalDocsExamined'] += explain_plan['executionStats']['totalDocsExamined']
+
+    return metrics
+
+def execute_query(db, collection, query, metrics):
+    if 'UPDATE' in query['sql'] or 'DELETE' in query['sql'] or 'INSERT INTO' in query['sql']:
+        pass
+    elif 'COUNT(*)' in query['sql']:
+        filter_criteria = {'price': {'$gt': 500}}
+        explain_plan = db.command(
+            'explain',
+            {
+                'aggregate': collection,
+                'pipeline': [
+                    {'$match': filter_criteria},
+                    {'$count': 'total_docs'}
+                ],
+                'cursor': {}
+            },
+            verbosity='executionStats'
+        )
+        metrics['executionTimeMillis'] += explain_plan['stages'][0]['$cursor']['executionStats']['executionTimeMillis']
+        metrics['nReturned'] += explain_plan['stages'][0]['$cursor']['executionStats']['nReturned']
+        metrics['totalKeysExamined'] += explain_plan['stages'][0]['$cursor']['executionStats']['totalKeysExamined']
+        metrics['totalDocsExamined'] += explain_plan['stages'][0]['$cursor']['executionStats']['totalDocsExamined']
+    elif 'pipeline' in query.keys():
+        explain_plan = db.command(
+            'explain',
+            {
+                'aggregate': collection,
+                'pipeline': query['pipeline'],
+                'cursor': {}
+            },
+            verbosity='executionStats'
+        )
+        metrics['executionTimeMillis'] += explain_plan['executionStats']['executionTimeMillis']
+        metrics['nReturned'] += explain_plan['executionStats']['nReturned']
+        metrics['totalKeysExamined'] += explain_plan['executionStats']['totalKeysExamined']
+        metrics['totalDocsExamined'] += explain_plan['executionStats']['totalDocsExamined']
+    else:
+        explain_plan = query['query'](db).explain()
+        metrics['executionTimeMillis'] += explain_plan['executionStats']['executionTimeMillis']
+        metrics['nReturned'] += explain_plan['executionStats']['nReturned']
+        metrics['totalKeysExamined'] += explain_plan['executionStats']['totalKeysExamined']
+        metrics['totalDocsExamined'] += explain_plan['executionStats']['totalDocsExamined']
+
+def execute_queries_concurrently(db, query_db):
+    metrics = {
+        'executionTimeMillis': 0,
+        'nReturned': 0,
+        'totalKeysExamined': 0,
+        'totalDocsExamined': 0
+    }
+
+    with concurrent.futures.ThreadPoolExecutor() as executor:
+        futures = []
+        for collection, queries in query_db.items():
+            for query in queries:
+                futures.append(executor.submit(execute_query, db, collection, query, metrics))
+        
+        for future in concurrent.futures.as_completed(futures):
+            future.result()  # Wait for all futures to complete
 
     return metrics
 
@@ -311,26 +375,36 @@ def convertToStateVector(state):
     return state_vector[:], collection_list[:], field_list[:]
 
 def getQueryMetrics(db_conn):
-    metrics = execute_queries_og(db_conn, query_set.query_db)
+    metrics = execute_queries_concurrently(db_conn, query_set.query_db)
     return metrics
 
 if __name__ == "__main__":
     client = MongoClient('mongodb://localhost:27017/')
     db_conn = client['benchmark_db1']
 
-    # state = getStaticInfo(db_conn)
-    # state = addIndexInfo(db_conn, state)
-    # saveAsJSON(state)
+    # start = time.time()
+    # execute_queries_og(db_conn, query_set.query_db)
+    # end = time.time()
+    # print("sequential : ", end - start)
+
+    # start = time.time()
+    # execute_queries_concurrently(db_conn, query_set.query_db)
+    # end = time.time()
+    # print("concurrent : ", end - start)
+
+    state = getStaticInfo(db_conn)
+    state = addIndexInfo(db_conn, state)
+    saveAsJSON(state)
 
     # metrics = getQueryMetrics(db_conn)
     # print(metrics)
     # client.close()
 
-    partial_state = dict(getStaticInfo(db_conn))
-    og_state_dict = dict(addIndexInfo(db_conn, partial_state))
-    og_state_vector, collections, fields = convertToStateVector(og_state_dict) # returns a 1X192 list
-    print(collections)
-    print(fields)
+    # partial_state = dict(getStaticInfo(db_conn))
+    # og_state_dict = dict(addIndexInfo(db_conn, partial_state))
+    # og_state_vector, collections, fields = convertToStateVector(og_state_dict) # returns a 1X192 list
+    # print(collections)
+    # print(fields)
 
     # # #constants
     # state = extract_collection_fields(db_conn, query_set.query_db)
