@@ -7,11 +7,11 @@ def create_single_field_index(db_conn, collection_name, field_name):
 
     indexes = collection.index_information()
     if any(field_name in index['key'][0] for index in indexes.values()):
-        print(f"Index on '{field_name}' already exists.")
+        # print(f"Index on '{field_name}' already exists.")
         return 0
     else:
         collection.create_index([(field_name, 1)])
-        print(f"Index on '{field_name}' created successfully.")
+        # print(f"Index on '{field_name}' created successfully.")
         return 1
 
 def delete_single_field_index(db_conn, collection_name, field_name):
@@ -21,10 +21,10 @@ def delete_single_field_index(db_conn, collection_name, field_name):
     for index_name, index_info in indexes.items():
         if field_name in index_info['key'][0]:
             collection.drop_index(index_name)
-            print(f"Index on '{field_name}' deleted successfully.")
+            # print(f"Index on '{field_name}' deleted successfully.")
             return 1
 
-    print(f"No index found on '{field_name}' to delete.")
+    # print(f"No index found on '{field_name}' to delete.")
     return 0
 
 def reset_index_config(db_conn, state):
